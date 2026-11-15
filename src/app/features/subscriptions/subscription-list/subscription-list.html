@@ -123,14 +123,20 @@
                 </span>
               </td>
               <td class="actions-col">
-                <button 
-                  class="btn-toggle" 
-                  [title]="sub.status === 'active' ? 'Mark Past Due' : 'Mark Active'"
-                  (click)="toggleStatus(sub.id, sub.status)">
-                  {{ sub.status === 'active' ? 'Suspend' : 'Activate' }}
-                </button>
-                <button class="btn-remove" (click)="subService.removeSubscription(sub.id)" title="Delete">✕</button>
-              </td>
+             <button
+               class="btn-toggle"
+               title="Edit Subscription & Renewal Date"
+               (click)="openEditModal(sub)">
+               Edit
+             </button>
+             <button
+               class="btn-toggle"
+               [title]="sub.status === 'active' || sub.status === 'trial' ? 'Suspend Access' : 'Activate Access'"
+               (click)="toggleStatus(sub.id, sub.status)">
+               {{ sub.status === 'active' || sub.status === 'trial' ? 'Suspend' : 'Activate' }}
+             </button>
+             <button class="btn-remove" (click)="subService.removeSubscription(sub.id)" title="Delete">✕</button>
+           </td>
             </tr>
           }
         </tbody>
@@ -142,22 +148,27 @@
   @if (isModalOpen) {
     <div class="modal-backdrop" (click)="closeModal()">
       <div class="modal-dialog" (click)="$event.stopPropagation()">
-        <h3>Add Client Subscription</h3>
-        
+       <h3>{{ editingSubId ? 'Edit Client Subscription' : 'Add Client Subscription' }}</h3>
+
         <div class="form-row">
           <div class="form-group">
-            <label>Client Name *</label>
-            <input type="text" [(ngModel)]="newClientName" placeholder="e.g. Kolonaki Bakery" />
+            <label>Client / Store Name *</label>
+            <input
+              type="text"
+              [ngModel]="newClientName"
+              (ngModelChange)="onClientNameChange($event)"
+              placeholder="e.g. Kolonaki Bakery"
+            />
           </div>
           <div class="form-group">
-            <label>Tax ID (AFM)</label>
-            <input type="text" [(ngModel)]="newTaxNumber" placeholder="EL..." />
+            <label>App Slug (URL ID) *</label>
+            <input
+              type="text"
+              [ngModel]="newAppSlug"
+              (ngModelChange)="onAppSlugChange($event)"
+              placeholder="e.g. ftest or kolonaki-bakery"
+            />
           </div>
-        </div>
-
-        <div class="form-group">
-          <label>Contact Email</label>
-          <input type="email" [(ngModel)]="newContactEmail" placeholder="billing@client.gr" />
         </div>
 
         <div class="form-row">
@@ -170,8 +181,10 @@
             </select>
           </div>
           <div class="form-group">
-            <label>Tier</label>
-            <select [(ngModel)]="newTier">
+            <label>Tier / Trial Mode *</label>
+            <select [ngModel]="newTier" (ngModelChange)="onTierChange($event)">
+              <option value="public_demo_7d">Public Demo (7d / Device)</option>
+              <option value="trial_7d">Client 7-Day Trial</option>
               <option value="starter">Starter</option>
               <option value="pro">Pro</option>
               <option value="enterprise">Enterprise</option>
@@ -179,10 +192,54 @@
           </div>
         </div>
 
+        @if (newTier === 'trial_7d') {
+          <div class="form-checkbox">
+            <input type="checkbox" id="trialFirstOpen" [(ngModel)]="newTrialStartsOnFirstOpen" />
+            <label for="trialFirstOpen">Start 7-day countdown when client first opens the app</label>
+          </div>
+        }
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Tax ID (AFM) {{ (newTier === 'trial_7d' || newTier === 'public_demo_7d') ? '(Disabled for Trial)' : '(9 digits)' }}</label>
+            <input
+              type="text"
+              maxlength="11"
+              [(ngModel)]="newTaxNumber"
+              [disabled]="newTier === 'trial_7d' || newTier === 'public_demo_7d'"
+              placeholder="e.g. 115773010"
+            />
+          </div>
+          <div class="form-group">
+            <label>Tax Office (Δ.Ο.Υ.)</label>
+            <input type="text" [(ngModel)]="newDoy" placeholder="e.g. ΚΕΦΟΔΕ / ΧΑΛΑΝΔΡΙΟΥ" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Business Address</label>
+            <input type="text" [(ngModel)]="newAddress" placeholder="Street, Number, City" />
+          </div>
+          <div class="form-group">
+            <label>Phone Number</label>
+            <input type="text" [(ngModel)]="newContactPhone" placeholder="e.g. 210-6001122" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Contact Email</label>
+          <input type="email" [(ngModel)]="newContactEmail" placeholder="billing@client.gr" />
+        </div>
+
         <div class="form-row">
           <div class="form-group">
             <label>Billing Interval</label>
-            <select [(ngModel)]="newInterval">
+            <select
+              [ngModel]="newInterval"
+              (ngModelChange)="onIntervalChange($event)"
+              [disabled]="newTier === 'trial_7d' || newTier === 'public_demo_7d'"
+            >
               <option value="monthly">Monthly</option>
               <option value="annual">Annual</option>
             </select>
@@ -199,7 +256,7 @@
             <input type="number" [(ngModel)]="newSeats" min="1" />
           </div>
           <div class="form-group">
-            <label>Next Billing Date *</label>
+            <label>Next Billing / Expiry Date *</label>
             <input type="date" [(ngModel)]="newNextBillingDate" />
           </div>
         </div>
@@ -211,7 +268,9 @@
 
         <div class="modal-actions">
           <button class="btn-secondary" (click)="closeModal()">Cancel</button>
-          <button class="btn-primary" (click)="saveClient()" [disabled]="!newClientName || !newNextBillingDate">Create License</button>
+          <button class="btn-primary" (click)="saveClient()" [disabled]="!newClientName || !newAppSlug || !newNextBillingDate">
+  {{ editingSubId ? 'Save Changes' : 'Create License' }}
+</button>
         </div>
       </div>
     </div>

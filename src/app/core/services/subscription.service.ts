@@ -106,7 +106,8 @@ export class SubscriptionService {
 
   // --- Helper: Map Dashboard Tier/Interval to Unified Ecosystem Tier ---
   private resolveEcosystemTier(tier: SubscriptionTier, interval: BillingInterval, status: SubscriptionStatus): string {
-    if (status === 'trial') return 'TRIAL';
+    if (tier === 'public_demo_7d') return 'PUBLIC_DEMO_7D';
+    if (tier === 'trial_7d' || status === 'trial') return 'TRIAL_7D';
     if (interval === 'annual') return 'PAID_ANNUAL';
     return 'PAID_MONTHLY';
   }
@@ -222,8 +223,24 @@ export class SubscriptionService {
             mappedStatus = 'canceled';
           } else if (effectiveStatusRaw === 'EXPIRED') {
             mappedStatus = 'past_due';
-          } else if (effectiveStatusRaw === 'TRIAL' || nestedSub.tier === 'TRIAL') {
+          } else if (
+            effectiveStatusRaw === 'TRIAL' ||
+            nestedSub.tier === 'TRIAL' ||
+            nestedSub.tier === 'TRIAL_7D' ||
+            nestedSub.tier === 'PUBLIC_DEMO_7D'
+          ) {
             mappedStatus = 'trial';
+          }
+
+          let mappedTier: SubscriptionTier = 'enterprise';
+          if (nestedSub.tier === 'PUBLIC_DEMO_7D' || rawPlan === 'public_demo_7d') {
+            mappedTier = 'public_demo_7d';
+          } else if (nestedSub.tier === 'TRIAL_7D' || rawPlan === 'trial_7d') {
+            mappedTier = 'trial_7d';
+          } else if (rawPlan === 'starter') {
+            mappedTier = 'starter';
+          } else if (rawPlan === 'pro') {
+            mappedTier = 'pro';
           }
 
           const validUntilIso: string = nestedSub.validUntil || '';
@@ -380,6 +397,79 @@ export class SubscriptionService {
     }
   }
 
+  // --- Edit / Update Existing Client Subscription (Firestore + Cloudflare KV) ---
+  async updateSubscription(id: string, sub: Omit<ClientSubscription, 'id'>): Promise<void> {
+    const validUntilIso = sub.nextBillingDate
+      ? `${sub.nextBillingDate}T23:59:59Z`
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const isActive = sub.status === 'active' || sub.status === 'trial';
+
+    // 1. Standalone Invoice Pro (Cloudflare KV)
+    if (id.startsWith('inv-')) {
+      const afm = id.replace('inv-', '') || sub.taxNumber;
+      if (afm) {
+        await this.syncAfmToCloudflareKv({
+          afm,
+          clientName: sub.clientName,
+          tier: sub.tier.toUpperCase(),
+          status: isActive ? 'ACTIVE' : 'SUSPENDED',
+          validUntil: validUntilIso
+        });
+      }
+      return;
+    }
+
+    // 2. Unified Tenant Document (/tenants/{id})
+    if (!this.firestore) return;
+
+    const docRef = doc(this.firestore, 'tenants', id);
+    const nowIso = new Date().toISOString();
+    const isPublicDemo = sub.tier === 'public_demo_7d';
+    const isTrial = isPublicDemo || sub.tier === 'trial_7d';
+    const startsOnFirstOpen = Boolean(sub.trialStartsOnFirstOpen && sub.tier === 'trial_7d');
+    const cleanAfm = isTrial ? '' : (sub.taxNumber || '');
+    const statusString = isTrial ? 'TRIAL' : (isActive ? 'ACTIVE' : 'SUSPENDED');
+    const ecosystemTier = this.resolveEcosystemTier(sub.tier, sub.interval, sub.status);
+
+    await updateDoc(docRef, {
+      name: sub.clientName,
+      clientName: sub.clientName,
+      afm: cleanAfm,
+      taxNumber: cleanAfm,
+      doy: sub.doy || '',
+      address: sub.address || '',
+      phone: sub.contactPhone || '',
+      contactPhone: sub.contactPhone || '',
+      contactEmail: sub.contactEmail || '',
+      product: sub.product,
+      plan: (sub.tier || 'ENTERPRISE').toUpperCase(),
+      status: statusString,
+      isActive,
+      interval: sub.interval,
+      amount: Number(sub.amount || 0),
+      seats: Number(sub.seats || 1),
+      autoRenew: Boolean(sub.autoRenew),
+      nextBillingDate: sub.nextBillingDate,
+      'subscription.tier': ecosystemTier,
+      'subscription.status': statusString,
+      'subscription.validUntil': (startsOnFirstOpen || isPublicDemo) ? null : validUntilIso,
+      'subscription.trialStartsOnFirstOpen': startsOnFirstOpen,
+      updatedAt: nowIso
+    });
+
+    // Mirror updated AFM / expiry to Cloudflare KV if 9-digit AFM exists
+    if (cleanAfm) {
+      await this.syncAfmToCloudflareKv({
+        afm: cleanAfm,
+        clientName: sub.clientName,
+        tier: 'RETAIL_SHOP',
+        status: isActive ? 'ACTIVE' : 'SUSPENDED',
+        validUntil: validUntilIso
+      });
+    }
+  }
+
   // --- Delete Client / License ---
   async removeSubscription(id: string): Promise<void> {
     if (id.startsWith('inv-')) {
@@ -439,11 +529,14 @@ export class SubscriptionService {
     const ecosystemTier = this.resolveEcosystemTier(sub.tier, sub.interval, sub.status);
     const licenseKey = sub.licenseKey?.trim() || `LIC-${slug.toUpperCase()}`;
 
+    const startsOnFirstOpen = Boolean(sub.trialStartsOnFirstOpen && sub.tier === 'trial_7d');
+    const isPublicDemo = sub.tier === 'public_demo_7d';
+
     const payload = {
       // Maranth POS & Maranth Hub Identity Fields
       code: slug,
       name: sub.clientName,
-      afm: sub.taxNumber || '',
+      afm: isPublicDemo || sub.tier === 'trial_7d' ? '' : (sub.taxNumber || ''),
       doy: (sub as any).doy || '',
       address: (sub as any).address || '',
       phone: sub.contactPhone || '',
@@ -454,8 +547,9 @@ export class SubscriptionService {
       subscription: {
         tier: ecosystemTier,
         status: statusString,
-        activatedAt: `${startDate}T00:00:00Z`,
-        validUntil: `${nextBillingDate}T23:59:59Z`,
+        activatedAt: (startsOnFirstOpen || isPublicDemo) ? null : `${startDate}T00:00:00Z`,
+        validUntil: (startsOnFirstOpen || isPublicDemo) ? null : `${nextBillingDate}T23:59:59Z`,
+        trialStartsOnFirstOpen: startsOnFirstOpen,
         licenseKey
       },
 
@@ -468,9 +562,11 @@ export class SubscriptionService {
 
       // Admin Dashboard Billing Metadata
       clientName: sub.clientName,
-      taxNumber: sub.taxNumber || '',
+      taxNumber: isPublicDemo || sub.tier === 'trial_7d' ? '' : (sub.taxNumber || ''),
       contactEmail: sub.contactEmail || '',
       contactPhone: sub.contactPhone || '',
+      seats: Number(sub.seats || 1),
+      autoRenew: Boolean(sub.autoRenew),
       amount: Number(sub.amount || 0),
       interval: sub.interval || 'monthly',
       startDate,
