@@ -1,0 +1,219 @@
+<div class="sub-wrapper">
+  <!-- Top Header -->
+  <header class="header-section">
+    <div>
+      <h2 class="title">Client Licenses & Subscriptions</h2>
+      <p class="subtitle">Live recurring revenue, active seats, and customer billing cycles.</p>
+    </div>
+    <button class="btn-primary" (click)="openModal()">
+      <span>+ Add Client</span>
+    </button>
+  </header>
+
+  <!-- Executive MRR Summary Strip -->
+  <section class="metrics-grid">
+    <div class="metric-card highlight-mrr">
+      <span class="metric-label">Total Monthly Run-Rate (MRR)</span>
+      <span class="metric-value">€{{ metrics().totalMrr | number:'1.0-0' }}</span>
+      <span class="metric-sub">Across all 3 applications</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Active Deployments</span>
+      <span class="metric-value">{{ metrics().activeCount }}</span>
+      <span class="metric-sub">{{ metrics().trialCount }} on active trials</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Invoice Pro MRR</span>
+      <span class="metric-value">€{{ metrics().productBreakdown['Maranth Invoice Pro'].mrr | number:'1.0-0' }}</span>
+      <span class="metric-sub">{{ metrics().productBreakdown['Maranth Invoice Pro'].count }} active clients</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Market POS MRR</span>
+      <span class="metric-value">€{{ metrics().productBreakdown['Market Engine POS'].mrr | number:'1.0-0' }}</span>
+      <span class="metric-sub">{{ metrics().productBreakdown['Market Engine POS'].count }} active stores</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Estiasi Hub MRR</span>
+      <span class="metric-value">€{{ metrics().productBreakdown['Estiasi Hub'].mrr | number:'1.0-0' }}</span>
+      <span class="metric-sub">{{ metrics().productBreakdown['Estiasi Hub'].count }} active venues</span>
+    </div>
+  </section>
+
+  <!-- Filter Bar -->
+  <section class="filter-bar">
+    <div class="filter-group">
+      <span class="group-label">Product:</span>
+      <button class="chip" [class.active]="selectedProduct() === 'all'" (click)="setProductFilter('all')">All</button>
+      <button class="chip" [class.active]="selectedProduct() === 'Maranth Invoice Pro'" (click)="setProductFilter('Maranth Invoice Pro')">Invoice Pro</button>
+      <button class="chip" [class.active]="selectedProduct() === 'Market Engine POS'" (click)="setProductFilter('Market Engine POS')">Market POS</button>
+      <button class="chip" [class.active]="selectedProduct() === 'Estiasi Hub'" (click)="setProductFilter('Estiasi Hub')">Estiasi Hub</button>
+    </div>
+
+    <div class="filter-group">
+      <span class="group-label">Status:</span>
+      <button class="chip" [class.active]="selectedStatus() === 'all'" (click)="setStatusFilter('all')">All</button>
+      <button class="chip chip-active" [class.active]="selectedStatus() === 'active'" (click)="setStatusFilter('active')">Active</button>
+      <button class="chip chip-trial" [class.active]="selectedStatus() === 'trial'" (click)="setStatusFilter('trial')">Trial</button>
+      <button class="chip chip-danger" [class.active]="selectedStatus() === 'past_due'" (click)="setStatusFilter('past_due')">Past Due</button>
+    </div>
+  </section>
+
+  <!-- Client Subscriptions Table -->
+  <section class="table-container">
+    @if (subscriptions().length === 0) {
+      <div class="empty-state">
+        <p>No client subscriptions match your filters.</p>
+      </div>
+    } @else {
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Client & Tax ID</th>
+            <th>Product / Tier</th>
+            <th>Billing / Plan</th>
+            <th>License Key</th>
+            <th>Next Renewal</th>
+            <th>Status</th>
+            <th class="actions-col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (sub of subscriptions(); track sub.id) {
+            <tr>
+              <td>
+                <div class="client-cell">
+                  <span class="client-name">{{ sub.clientName }}</span>
+                  <span class="client-sub">{{ sub.taxNumber || 'No AFM' }} · {{ sub.contactEmail }}</span>
+                </div>
+              </td>
+              <td>
+                <div class="product-cell">
+                  <span class="product-name">{{ sub.product }}</span>
+                  <span class="tier-badge">{{ sub.tier | uppercase }} · {{ sub.seats }} seat(s)</span>
+                </div>
+              </td>
+              <td>
+                <div class="billing-cell">
+                  <span class="amount-val">€{{ sub.amount }}<span class="interval">/{{ sub.interval === 'annual' ? 'yr' : 'mo' }}</span></span>
+                  @if (sub.interval === 'annual') {
+                    <span class="mrr-equiv">~€{{ sub.monthlyEquivalent | number:'1.0-0' }}/mo</span>
+                  }
+                </div>
+              </td>
+              <td>
+                <code class="license-code">{{ sub.licenseKey }}</code>
+              </td>
+              <td>
+                <div class="renewal-cell" [class.urgent]="sub.daysUntilRenewal <= 7">
+                  <span class="date-val">{{ sub.nextBillingDate }}</span>
+                  <span class="countdown-val">
+                    @if (sub.daysUntilRenewal < 0) {
+                      {{ -sub.daysUntilRenewal }}d past due
+                    } @else if (sub.daysUntilRenewal === 0) {
+                      Renews Today
+                    } @else {
+                      in {{ sub.daysUntilRenewal }} days
+                    }
+                  </span>
+                </div>
+              </td>
+              <td>
+                <span class="status-badge" [ngClass]="sub.status">
+                  {{ sub.status | uppercase }}
+                </span>
+              </td>
+              <td class="actions-col">
+                <button 
+                  class="btn-toggle" 
+                  [title]="sub.status === 'active' ? 'Mark Past Due' : 'Mark Active'"
+                  (click)="toggleStatus(sub.id, sub.status)">
+                  {{ sub.status === 'active' ? 'Suspend' : 'Activate' }}
+                </button>
+                <button class="btn-remove" (click)="subService.removeSubscription(sub.id)" title="Delete">✕</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+
+  <!-- Add Client Modal -->
+  @if (isModalOpen) {
+    <div class="modal-backdrop" (click)="closeModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <h3>Add Client Subscription</h3>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Client Name *</label>
+            <input type="text" [(ngModel)]="newClientName" placeholder="e.g. Kolonaki Bakery" />
+          </div>
+          <div class="form-group">
+            <label>Tax ID (AFM)</label>
+            <input type="text" [(ngModel)]="newTaxNumber" placeholder="EL..." />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Contact Email</label>
+          <input type="email" [(ngModel)]="newContactEmail" placeholder="billing@client.gr" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Product *</label>
+            <select [(ngModel)]="newProduct">
+              <option value="Maranth Invoice Pro">Maranth Invoice Pro</option>
+              <option value="Market Engine POS">Market Engine POS</option>
+              <option value="Estiasi Hub">Estiasi Hub</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Tier</label>
+            <select [(ngModel)]="newTier">
+              <option value="starter">Starter</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Billing Interval</label>
+            <select [(ngModel)]="newInterval">
+              <option value="monthly">Monthly</option>
+              <option value="annual">Annual</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Amount (€) *</label>
+            <input type="number" [(ngModel)]="newAmount" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Seats</label>
+            <input type="number" [(ngModel)]="newSeats" min="1" />
+          </div>
+          <div class="form-group">
+            <label>Next Billing Date *</label>
+            <input type="date" [(ngModel)]="newNextBillingDate" />
+          </div>
+        </div>
+
+        <div class="form-checkbox">
+          <input type="checkbox" id="subAutoRenew" [(ngModel)]="newAutoRenew" />
+          <label for="subAutoRenew">Auto-debit recurring renewal enabled</label>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button class="btn-primary" (click)="saveClient()" [disabled]="!newClientName || !newNextBillingDate">Create License</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

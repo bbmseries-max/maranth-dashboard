@@ -1,0 +1,108 @@
+<div class="health-wrapper">
+  <!-- Header -->
+  <header class="header-section">
+    <div>
+      <h2 class="title">Sentry Telemetry & App Health</h2>
+      <p class="subtitle">Live unhandled exceptions and client-side error telemetry across the Maranth cluster.</p>
+    </div>
+    <div class="status-pill" [ngClass]="overview().systemStatus">
+      <span class="dot"></span>
+      <span class="label">
+        @if (overview().systemStatus === 'nominal') { ALL SYSTEMS OPTIMAL }
+        @else if (overview().systemStatus === 'degraded') { ATTENTION REQUIRED }
+        @else { ACTIVE INCIDENT }
+      </span>
+    </div>
+  </header>
+
+  <!-- Metrics Strip -->
+  <section class="metrics-grid">
+    <div class="metric-card">
+      <span class="metric-label">Monitored Apps</span>
+      <span class="metric-value">{{ overview().projects.length }}</span>
+      <span class="metric-sub">Angular v22 + Sentry v11</span>
+    </div>
+    <div class="metric-card" [class.alert-warning]="overview().totalUnresolved > 0">
+      <span class="metric-label">Unresolved Issues</span>
+      <span class="metric-value">{{ overview().totalUnresolved }}</span>
+      <span class="metric-sub">Across all projects</span>
+    </div>
+    <div class="metric-card" [class.alert-critical]="overview().criticalAlerts > 0">
+      <span class="metric-label">P0 Crashes</span>
+      <span class="metric-value">{{ overview().criticalAlerts }}</span>
+      <span class="metric-sub">Routing directly to Linear</span>
+    </div>
+  </section>
+
+  <!-- Project Health Status Cards -->
+  <section class="projects-section">
+    <h3 class="section-title">Cluster Applications</h3>
+    <div class="project-grid">
+      @for (project of overview().projects; track project.id) {
+        <div class="project-card" [ngClass]="project.status">
+          <div class="card-top">
+            <span class="project-name">{{ project.name }}</span>
+            <span class="status-badge" [ngClass]="project.status">{{ project.status | uppercase }}</span>
+          </div>
+
+          <div class="card-stats">
+            <div class="stat-item">
+              <span class="stat-num">{{ project.unresolvedCount }}</span>
+              <span class="stat-lbl">Open Issues</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-num">{{ project.criticalCount }}</span>
+              <span class="stat-lbl">P0 Fatal</span>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <span class="last-seen">Activity: {{ project.lastEventTime }}</span>
+            <a 
+              [href]="'https://sentry.io/organizations/' + healthService.orgSlug + '/issues/?project=' + project.id" 
+              target="_blank" 
+              class="sentry-link">
+              Inspect in Sentry ↗
+            </a>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- Recent Issues Live Stream -->
+  <section class="issues-section">
+    <h3 class="section-title">Live Unhandled Exception Stream</h3>
+    @if (recentIssues().length === 0) {
+      <div class="empty-state">
+        <p>✨ Zero unhandled errors reported in production. The cluster is clean.</p>
+      </div>
+    } @else {
+      <div class="issue-list">
+        @for (issue of recentIssues(); track issue.id) {
+          <article class="issue-item">
+            <div class="issue-badge-col">
+              <span class="error-badge">ERROR</span>
+              <span class="event-count">{{ issue.count }} events</span>
+            </div>
+
+            <div class="issue-main-col">
+              <h4 class="issue-title">{{ issue.title }}</h4>
+              <p class="issue-culprit">{{ issue.culprit }} · <span class="project-tag">{{ issue.projectSlug }}</span></p>
+              <div class="issue-timestamps">
+                <span>First seen: {{ issue.firstSeen }}</span>
+                <span>Last captured: {{ issue.lastSeen }}</span>
+                <span>Affected: {{ issue.userCount }} client(s)</span>
+              </div>
+            </div>
+
+            <div class="issue-actions-col">
+              <a [href]="issue.permalink" target="_blank" class="btn-sentry">View Replay</a>
+              <button class="btn-resolve" (click)="resolveIssue(issue.id)">Resolve</button>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+</div>

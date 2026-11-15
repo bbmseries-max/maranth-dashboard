@@ -1,0 +1,138 @@
+<div class="board-wrapper">
+  <!-- Top Header -->
+  <header class="header-section">
+    <div>
+      <h2 class="title">Today's Action Board</h2>
+      <p class="subtitle">Linear tasks, Sentry P0 crash escalations, and founder sprint priorities.</p>
+    </div>
+    <button class="btn-primary" (click)="openModal()">
+      <span>+ Create Ticket</span>
+    </button>
+  </header>
+
+  <!-- Metric Strip -->
+  <section class="metrics-grid">
+    <div class="metric-card">
+      <span class="metric-label">Active Tasks</span>
+      <span class="metric-value">{{ metrics().totalActive }}</span>
+      <span class="metric-sub">Assigned to Robert Cuko</span>
+    </div>
+    <div class="metric-card" [class.alert-critical]="metrics().urgentCount > 0">
+      <span class="metric-label">Urgent / P0</span>
+      <span class="metric-value">{{ metrics().urgentCount }}</span>
+      <span class="metric-sub">{{ metrics().sentryP0Count }} via Sentry pipeline</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">Triage</span>
+      <span class="metric-value">{{ metrics().triageCount }}</span>
+      <span class="metric-sub">Awaiting confirmation</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">In Progress</span>
+      <span class="metric-value">{{ metrics().inProgressCount }}</span>
+      <span class="metric-sub">{{ metrics().todoCount }} in Todo backlog</span>
+    </div>
+  </section>
+
+  <!-- Filter Bar -->
+  <section class="filter-bar">
+    <div class="filter-group">
+      <span class="group-label">Status:</span>
+      <button class="chip" [class.active]="selectedStatus() === 'all'" (click)="setStatusFilter('all')">All</button>
+      <button class="chip chip-triage" [class.active]="selectedStatus() === 'triage'" (click)="setStatusFilter('triage')">Triage</button>
+      <button class="chip" [class.active]="selectedStatus() === 'todo'" (click)="setStatusFilter('todo')">Todo</button>
+      <button class="chip chip-prog" [class.active]="selectedStatus() === 'in_progress'" (click)="setStatusFilter('in_progress')">In Progress</button>
+      <button class="chip" [class.active]="selectedStatus() === 'done'" (click)="setStatusFilter('done')">Done</button>
+    </div>
+
+    <div class="filter-group">
+      <span class="group-label">Project:</span>
+      <button class="chip" [class.active]="selectedProject() === 'all'" (click)="setProjectFilter('all')">All</button>
+      <button class="chip" [class.active]="selectedProject() === 'Maranth Invoice Pro'" (click)="setProjectFilter('Maranth Invoice Pro')">Invoice Pro</button>
+      <button class="chip" [class.active]="selectedProject() === 'Market Engine POS'" (click)="setProjectFilter('Market Engine POS')">Market POS</button>
+      <button class="chip" [class.active]="selectedProject() === 'Estiasi Hub'" (click)="setProjectFilter('Estiasi Hub')">Estiasi Hub</button>
+    </div>
+  </section>
+
+  <!-- Issues List -->
+  <section class="issues-container">
+    @if (issues().length === 0) {
+      <div class="empty-state">
+        <p>No action items match the selected filters.</p>
+      </div>
+    } @else {
+      <div class="issue-list">
+        @for (item of issues(); track item.id) {
+          <article class="issue-card" [ngClass]="item.priority">
+            <div class="card-left">
+              <div class="priority-pill" [ngClass]="item.priority">
+                {{ item.priority | uppercase }}
+              </div>
+
+              <div class="card-body">
+                <div class="header-line">
+                  <span class="identifier">{{ item.identifier }}</span>
+                  <span class="project-tag">{{ item.project }}</span>
+                  @if (item.source === 'sentry') {
+                    <span class="source-tag">⚡ SENTRY CRASH</span>
+                  }
+                </div>
+                <h4 class="issue-title">{{ item.title }}</h4>
+                <div class="meta-line">
+                  <span>Assigned: {{ item.assignee }}</span>
+                  <span>Created: {{ item.createdAt }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card-right">
+              <button class="status-btn" [ngClass]="item.status" (click)="advanceStatus(item.id, item.status)">
+                {{ item.status | uppercase }} ➜
+              </button>
+              <a [href]="item.url" target="_blank" rel="noopener noreferrer" class="linear-link">Open in Linear ↗</a>
+            </div>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- Create Issue Modal -->
+  @if (isModalOpen) {
+    <div class="modal-backdrop" (click)="closeModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <h3>Create Linear Issue</h3>
+        <div class="form-group">
+          <label>Issue Title *</label>
+          <input type="text" [(ngModel)]="newTitle" placeholder="e.g. Implement receipt printer retry timeout" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Project</label>
+            <select [(ngModel)]="newProject">
+              <option value="Market Engine POS">Market Engine POS</option>
+              <option value="Maranth Invoice Pro">Maranth Invoice Pro</option>
+              <option value="Estiasi Hub">Estiasi Hub</option>
+              <option value="All Ecosystem">All Ecosystem</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Priority</label>
+            <select [(ngModel)]="newPriority">
+              <option value="urgent">Urgent (P0)</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button class="btn-primary" (click)="saveIssue()" [disabled]="!newTitle">Create Ticket</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

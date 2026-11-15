@@ -1,0 +1,206 @@
+<div class="horizon-wrapper">
+  <!-- Top Executive Summary Bar -->
+  <header class="header-section">
+    <div>
+      <h2 class="title">Horizon & Skyline Radar</h2>
+      <p class="subtitle">Upcoming operational deadlines, client renewals, and compliance milestones.</p>
+    </div>
+    <button class="btn-primary" (click)="openModal()">
+      <span>+ Add Milestone</span>
+    </button>
+  </header>
+
+  <!-- Metric Counters Strip -->
+  <section class="metrics-grid">
+    <div class="metric-card">
+      <span class="metric-label">Active Milestones</span>
+      <span class="metric-value">{{ metrics().total }}</span>
+    </div>
+    <div class="metric-card alert-critical">
+      <span class="metric-label">Critical (< 7 Days)</span>
+      <span class="metric-value">{{ metrics().criticalCount }}</span>
+    </div>
+    <div class="metric-card alert-upcoming">
+      <span class="metric-label">Upcoming (< 30 Days)</span>
+      <span class="metric-value">{{ metrics().upcomingCount }}</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-label">30-Day Committed Outflow</span>
+      <span class="metric-value">€{{ metrics().monthlyCommittedCost | number:'1.0-2' }}</span>
+    </div>
+  </section>
+
+  <!-- Filter Controls -->
+  <section class="filter-bar">
+    <div class="filter-group">
+      <span class="group-label">Category:</span>
+      <button 
+        class="chip" 
+        [class.active]="selectedCategory() === 'all'" 
+        (click)="setCategory('all')">All</button>
+      <button 
+        class="chip" 
+        [class.active]="selectedCategory() === 'infrastructure'" 
+        (click)="setCategory('infrastructure')">Infrastructure</button>
+      <button 
+        class="chip" 
+        [class.active]="selectedCategory() === 'subscription'" 
+        (click)="setCategory('subscription')">Subscriptions</button>
+      <button 
+        class="chip" 
+        [class.active]="selectedCategory() === 'compliance'" 
+        (click)="setCategory('compliance')">Compliance</button>
+      <button 
+        class="chip" 
+        [class.active]="selectedCategory() === 'roadmap'" 
+        (click)="setCategory('roadmap')">Roadmap</button>
+    </div>
+
+    <div class="filter-group">
+      <span class="group-label">Urgency:</span>
+      <button 
+        class="chip" 
+        [class.active]="selectedUrgency() === 'all'" 
+        (click)="setUrgency('all')">All</button>
+      <button 
+        class="chip chip-critical" 
+        [class.active]="selectedUrgency() === 'critical'" 
+        (click)="setUrgency('critical')">Critical</button>
+      <button 
+        class="chip chip-upcoming" 
+        [class.active]="selectedUrgency() === 'upcoming'" 
+        (click)="setUrgency('upcoming')">Upcoming</button>
+      <button 
+        class="chip" 
+        [class.active]="selectedUrgency() === 'normal'" 
+        (click)="setUrgency('normal')">Normal</button>
+    </div>
+  </section>
+
+  <!-- Timeline Cards Feed -->
+  <section class="timeline-container">
+    @if (timeline().length === 0) {
+      <div class="empty-state">
+        <p>No operational milestones match your current filters.</p>
+      </div>
+    }
+
+    <div class="cards-list">
+      @for (item of timeline(); track item.id) {
+        <article class="horizon-card" [ngClass]="item.urgency">
+          <div class="card-left">
+            <div class="countdown-badge" [ngClass]="item.urgency">
+              @if (item.daysRemaining < 0) {
+                <span class="days-num">{{ -item.daysRemaining }}</span>
+                <span class="days-label">d overdue</span>
+              } @else if (item.daysRemaining === 0) {
+                <span class="days-num">TODAY</span>
+              } @else {
+                <span class="days-num">{{ item.daysRemaining }}</span>
+                <span class="days-label">days left</span>
+              }
+            </div>
+
+            <div class="meta-info">
+              <div class="header-tags">
+                <span class="target-app">{{ item.targetApp }}</span>
+                <span class="category-tag">{{ item.category | uppercase }}</span>
+                @if (item.autoRenews) {
+                  <span class="badge-autorenew">AUTO-RENEW</span>
+                }
+              </div>
+              <h3 class="item-title">{{ item.title }}</h3>
+              @if (item.notes) {
+                <p class="item-notes">{{ item.notes }}</p>
+              }
+              <div class="footer-meta">
+                <span class="due-date">Due: {{ item.dueDate }}</span>
+                @if (item.cost) {
+                  <span class="cost-tag">€{{ item.cost | number:'1.0-2' }}</span>
+                }
+              </div>
+            </div>
+          </div>
+
+          <div class="card-right">
+            @if (item.actionUrl) {
+              <a [href]="item.actionUrl" target="_blank" rel="noopener noreferrer" class="btn-action">
+                Manage ↗
+              </a>
+            }
+            <button class="btn-remove" (click)="horizonService.removeItem(item.id)" title="Dismiss">
+              ✕
+            </button>
+          </div>
+        </article>
+      }
+    </div>
+  </section>
+
+  <!-- Modal for Creating New Items -->
+  @if (isModalOpen) {
+    <div class="modal-backdrop" (click)="closeModal()">
+      <div class="modal-dialog" (click)="$event.stopPropagation()">
+        <h3>Add Horizon Milestone</h3>
+        
+        <div class="form-group">
+          <label>Title *</label>
+          <input type="text" [(ngModel)]="newItemTitle" placeholder="e.g. Stripe Tax Certification" />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Due Date *</label>
+            <input type="date" [(ngModel)]="newItemDueDate" />
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select [(ngModel)]="newItemCategory">
+              <option value="infrastructure">Infrastructure</option>
+              <option value="subscription">Subscription</option>
+              <option value="compliance">Compliance</option>
+              <option value="roadmap">Roadmap</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Target Application</label>
+            <select [(ngModel)]="newItemTargetApp">
+              <option value="maranth.gr">maranth.gr</option>
+              <option value="Maranth Invoice Pro">Maranth Invoice Pro</option>
+              <option value="Market Engine POS">Market Engine POS</option>
+              <option value="Estiasi Hub">Estiasi Hub</option>
+              <option value="All Ecosystem">All Ecosystem</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Committed Cost (€)</label>
+            <input type="number" [(ngModel)]="newItemCost" placeholder="Optional" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Action URL</label>
+          <input type="url" [(ngModel)]="newItemActionUrl" placeholder="https://..." />
+        </div>
+
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea [(ngModel)]="newItemNotes" rows="2" placeholder="Renewal details or credentials checklist"></textarea>
+        </div>
+
+        <div class="form-checkbox">
+          <input type="checkbox" id="autoRenew" [(ngModel)]="newItemAutoRenews" />
+          <label for="autoRenew">Automatic renewal enabled</label>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" (click)="closeModal()">Cancel</button>
+          <button class="btn-primary" (click)="saveItem()" [disabled]="!newItemTitle || !newItemDueDate">Save Milestone</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

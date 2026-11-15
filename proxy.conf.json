@@ -1,0 +1,11 @@
+{
+  "/api/sentry": {
+    "target": "https://sentry.io/api/0",
+    "secure": true,
+    "changeOrigin": true,
+    "logLevel": "debug",
+    "pathRewrite": {
+      "^/api/sentry": ""
+    }
+  }
+}
