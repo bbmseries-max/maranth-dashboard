@@ -2,7 +2,7 @@ import { ApplicationConfig, provideZonelessChangeDetection } from '@angular/core
 import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 import { initializeApp, provideFirebaseApp, FirebaseOptions } from '@angular/fire/app';
-import { getFirestore, provideFirestore } from '@angular/fire/firestore';
+import { initializeFirestore, provideFirestore } from '@angular/fire/firestore';
 import { getAuth, provideAuth } from '@angular/fire/auth';
 
 import { routes } from './app.routes';
@@ -12,13 +12,13 @@ const firebaseConfig = (environment.firebase as any)?.hub || environment.firebas
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    // Pure Zoneless Change Detection:
     provideZonelessChangeDetection(),
-
     provideRouter(routes),
     provideHttpClient(),
     provideFirebaseApp(() => initializeApp(firebaseConfig as FirebaseOptions)),
-    provideFirestore(() => getFirestore()),
+    provideFirestore(() => initializeFirestore(initializeApp(firebaseConfig as FirebaseOptions), {
+      experimentalAutoDetectLongPolling: true
+    })),
     provideAuth(() => getAuth())
   ]
 };
