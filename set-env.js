@@ -20,6 +20,15 @@ const envFileContent = `export const environment = {
       appId: '${clean(process.env.FIREBASE_APP_ID)}'
     }
   },
+  sentry: {
+    authToken: '${clean(process.env.SENTRY_AUTH_TOKEN)}',
+    organizationSlug: 'robert-cuko',
+    projects: ['athina-appliance', 'estiasi-hub-pa', 'maranth-invoice-pro', 'market-engine-pos']
+  },
+  linear: {
+    apiKey: '${clean(process.env.LINEAR_API_KEY)}',
+    teamKey: 'maranth-dashboard'
+  },
   invoiceProGateway: {
     url: '${clean(process.env.INVOICE_PRO_GATEWAY_URL, 'https://gsis-lookup.bbmseries.workers.dev')}',
     adminKey: '${clean(process.env.INVOICE_PRO_ADMIN_KEY)}'
