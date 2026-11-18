@@ -210,9 +210,9 @@ export class SubscriptionService {
           const docData = d as any;
           const nestedSub = docData.subscription || {};
 
-          const clientName = docData.name || docData.clientName || 'Maranth Store';
+          const clientName = docData.name || docData.clientName || d.id;
           const slug = docData.code || docData.shopSlug || docData.appSlug || d.id;
-          const rawPlan = String(docData.plan || docData.tier || 'enterprise').trim().toLowerCase();
+          const rawPlan = String(docData.plan || docData.tier || '').trim().toLowerCase();
 
           const effectiveStatusRaw = String(
             nestedSub.status || docData.status || (docData.isActive === false ? 'SUSPENDED' : 'ACTIVE')
@@ -232,39 +232,48 @@ export class SubscriptionService {
             mappedStatus = 'trial';
           }
 
-          let mappedTier: SubscriptionTier = 'enterprise';
+          let mappedTier: SubscriptionTier = 'pro';
           if (nestedSub.tier === 'PUBLIC_DEMO_7D' || rawPlan === 'public_demo_7d') {
             mappedTier = 'public_demo_7d';
           } else if (nestedSub.tier === 'TRIAL_7D' || rawPlan === 'trial_7d') {
             mappedTier = 'trial_7d';
           } else if (rawPlan === 'starter') {
             mappedTier = 'starter';
-          } else if (rawPlan === 'pro') {
-            mappedTier = 'pro';
+          } else if (rawPlan === 'enterprise') {
+            mappedTier = 'enterprise';
           }
 
+          const isTrialOrDemo = mappedTier === 'public_demo_7d' || mappedTier === 'trial_7d' || mappedStatus === 'trial';
           const validUntilIso: string = nestedSub.validUntil || '';
+          const fallbackDate = new Date(Date.now() + (isTrialOrDemo ? 7 : 30) * 24 * 60 * 60 * 1000)
+            .toISOString()
+            .split('T')[0];
+
           const nextBillingDate = validUntilIso
             ? validUntilIso.split('T')[0]
-            : (docData.nextBillingDate || '2027-08-30');
+            : (docData.nextBillingDate || fallbackDate);
 
-          const isAnnual = nestedSub.tier === 'PAID_ANNUAL' || docData.interval === 'annual' || docData.amount === 300;
+          const isAnnual = nestedSub.tier === 'PAID_ANNUAL' || docData.interval === 'annual';
+          const inferredProduct: EcosystemProduct =
+            (docData.product as EcosystemProduct) ||
+            (d.id.includes('estiasi') || d.id.includes('coffee') ? 'Estiasi Hub' : 'Market Engine POS');
 
           const base: ClientSubscription = {
             id: d.id,
             clientName,
-            taxNumber: docData.afm || docData.taxNumber || '',
+            taxNumber: isTrialOrDemo ? '' : (docData.afm || docData.taxNumber || ''),
             appSlug: slug,
-            contactEmail: docData.contactEmail || 'billing@maranth.gr',
+            contactEmail: docData.contactEmail || '',
             contactPhone: docData.phone || docData.contactPhone || '',
-            product: (docData.product as EcosystemProduct) || 'Estiasi Hub',
-            tier: (rawPlan === 'enterprise' ? 'enterprise' : 'pro') as SubscriptionTier,
+            product: inferredProduct,
+            tier: mappedTier,
             status: mappedStatus,
             interval: (docData.interval as BillingInterval) || (isAnnual ? 'annual' : 'monthly'),
-            amount: Number(docData.amount ?? 300),
-            startDate: nestedSub.activatedAt ? nestedSub.activatedAt.split('T')[0] : (docData.startDate || '2026-01-01'),
+            amount: Number(docData.amount ?? 0),
+            seats: Number(docData.seats ?? 1),
+            trialStartsOnFirstOpen: Boolean(nestedSub.trialStartsOnFirstOpen),
+            startDate: nestedSub.activatedAt ? nestedSub.activatedAt.split('T')[0] : (docData.startDate || new Date().toISOString().split('T')[0]),
             nextBillingDate,
-            seats: 1,
             autoRenew: docData.autoRenew ?? true,
             licenseKey: nestedSub.licenseKey || docData.licenseKey || `LIC-${d.id.toUpperCase()}`,
             notes: docData.notes || ''
