@@ -32,7 +32,11 @@ const envFileContent = `export const environment = {
   invoiceProGateway: {
     url: '${clean(process.env.INVOICE_PRO_GATEWAY_URL, 'https://gsis-lookup.bbmseries.workers.dev')}',
     adminKey: '${clean(process.env.INVOICE_PRO_ADMIN_KEY)}'
-  }
+  },
+  adminAuth: {
+    email: '${process.env.ADMIN_AUTH_EMAIL || "bbmseries@gmail.com"}',
+    password: '${process.env.ADMIN_AUTH_PASSWORD || ""}'
+  },
 };
 `;
 
