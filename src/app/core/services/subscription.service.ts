@@ -93,7 +93,7 @@ export class SubscriptionService {
   });
 
   constructor() {
-    this.initFirestoreStream();
+    this.initListeners();
     this.loadInvoiceProSubscriptions();
 
     this.destroyRef.onDestroy(() => {
@@ -102,6 +102,15 @@ export class SubscriptionService {
         this.firestoreUnsub = null;
       }
     });
+  }
+
+  // --- Public Re-Bind Hook (Called by AppComponent after silent Firebase Auth resolves) ---
+  public initListeners(): void {
+    if (this.firestoreUnsub) {
+      this.firestoreUnsub();
+      this.firestoreUnsub = null;
+    }
+    this.initFirestoreStream();
   }
 
   // --- Helper: Map Dashboard Tier/Interval to Unified Ecosystem Tier ---
@@ -366,7 +375,6 @@ export class SubscriptionService {
         updatedAt: new Date().toISOString()
       });
 
-      // Mirror status to Cloudflare KV if this POS/Estiasi shop has a 9-digit AFM
       const existing = this.firestoreSubscriptions().find(s => s.id === id);
       if (existing?.taxNumber) {
         await this.syncAfmToCloudflareKv({
@@ -446,8 +454,8 @@ export class SubscriptionService {
       clientName: sub.clientName,
       afm: cleanAfm,
       taxNumber: cleanAfm,
-      doy: sub.doy || '',
-      address: sub.address || '',
+      doy: (sub as any).doy || '',
+      address: (sub as any).address || '',
       phone: sub.contactPhone || '',
       contactPhone: sub.contactPhone || '',
       contactEmail: sub.contactEmail || '',
@@ -467,7 +475,6 @@ export class SubscriptionService {
       updatedAt: nowIso
     });
 
-    // Mirror updated AFM / expiry to Cloudflare KV if 9-digit AFM exists
     if (cleanAfm) {
       await this.syncAfmToCloudflareKv({
         afm: cleanAfm,
@@ -499,7 +506,7 @@ export class SubscriptionService {
     }
   }
 
-  // --- Create Client / License (Unified Multi-App Payload + KV Bridge) ---
+  // --- Create Client / License (Unified Multi-App Payload + Default Manager + KV Bridge) ---
   async createSubscription(sub: Omit<ClientSubscription, 'id'>): Promise<void> {
     const validUntilIso = sub.nextBillingDate
       ? `${sub.nextBillingDate}T23:59:59Z`
@@ -540,12 +547,13 @@ export class SubscriptionService {
 
     const startsOnFirstOpen = Boolean(sub.trialStartsOnFirstOpen && sub.tier === 'trial_7d');
     const isPublicDemo = sub.tier === 'public_demo_7d';
+    const cleanAfm = (isPublicDemo || sub.tier === 'trial_7d') ? '' : (sub.taxNumber || '');
 
     const payload = {
       // Maranth POS & Maranth Hub Identity Fields
       code: slug,
       name: sub.clientName,
-      afm: isPublicDemo || sub.tier === 'trial_7d' ? '' : (sub.taxNumber || ''),
+      afm: cleanAfm,
       doy: (sub as any).doy || '',
       address: (sub as any).address || '',
       phone: sub.contactPhone || '',
@@ -571,7 +579,7 @@ export class SubscriptionService {
 
       // Admin Dashboard Billing Metadata
       clientName: sub.clientName,
-      taxNumber: isPublicDemo || sub.tier === 'trial_7d' ? '' : (sub.taxNumber || ''),
+      taxNumber: cleanAfm,
       contactEmail: sub.contactEmail || '',
       contactPhone: sub.contactPhone || '',
       seats: Number(sub.seats || 1),
@@ -586,13 +594,31 @@ export class SubscriptionService {
       updatedAt: nowIso
     };
 
-    await setDoc(docRef, payload, { merge: true });
-    console.log(`[createSubscription] Provisioned unified tenant: /tenants/${slug}`);
+    const defaultManagerId = `emp_${slug}_1111`;
+    const defaultManagerPayload = {
+      id: defaultManagerId,
+      tenantId: slug,
+      storeId: slug,
+      name: `${sub.clientName} Manager`,
+      pin: '1111',
+      pinCode: '1111',
+      role: 'MANAGER',
+      hourlyRate: 0,
+      isActive: true,
+      createdAt: nowIso
+    };
 
-    // 3. Also register the store's 9-digit AFM in Cloudflare KV so Maranth Hub (Timologio) works out of the box
-    if (sub.taxNumber) {
+    await Promise.all([
+      setDoc(docRef, payload, { merge: true }),
+      setDoc(doc(this.firestore, 'employees', defaultManagerId), defaultManagerPayload, { merge: true })
+    ]);
+
+    console.log(`[createSubscription] Provisioned unified tenant & default manager: /tenants/${slug}`);
+
+    // 3. Register the store's 9-digit AFM in Cloudflare KV so Maranth Hub (Timologio) works out of the box
+    if (cleanAfm) {
       await this.syncAfmToCloudflareKv({
-        afm: sub.taxNumber,
+        afm: cleanAfm,
         clientName: sub.clientName,
         tier: 'RETAIL_SHOP',
         status: isActive ? 'ACTIVE' : 'SUSPENDED',
